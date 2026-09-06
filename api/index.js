@@ -9,13 +9,12 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Helper: resize base64 image to target size (return base64)
+// ========== HELPER: resize icon ==========
 async function resizeIcon(base64, size) {
-  const buffer = Buffer.from(base64.split(',')[1], 'base64');
+  const buffer = Buffer.from(base64.split(',')[1] || base64, 'base64');
   const image = await Jimp.read(buffer);
-  image.resize(size, size);
-  // Jika gambar tidak persegi, kita composite di tengah
   const newImage = new Jimp(size, size, 0xffffffff);
+  image.resize(size, size);
   const x = (size - image.bitmap.width) / 2;
   const y = (size - image.bitmap.height) / 2;
   newImage.composite(image, x, y);
@@ -23,11 +22,10 @@ async function resizeIcon(base64, size) {
   return 'data:image/png;base64,' + resizedBuffer.toString('base64');
 }
 
-// Helper: generate default icon (huruf pertama)
+// ========== HELPER: generate default icon ==========
 async function generateDefaultIcon(name) {
   const size = 512;
   const image = new Jimp(size, size, 0xffffffff);
-  // Warna gradien pastel
   const hue = Math.floor(Math.random() * 360);
   const baseColor = Jimp.rgbaToInt(
     200 + 55 * Math.sin(hue * Math.PI / 180),
@@ -45,7 +43,6 @@ async function generateDefaultIcon(name) {
     const newB = Math.floor(b + (255 - b) * ratio);
     image.setPixelColor(Jimp.rgbaToInt(newR, newG, newB, 255), x, y);
   });
-  // Tulis huruf pertama
   const font = await Jimp.loadFont(Jimp.FONT_SANS_128_BLACK);
   const text = name.charAt(0).toUpperCase();
   const textImg = new Jimp(size, size, 0x00000000);
@@ -60,10 +57,9 @@ async function generateDefaultIcon(name) {
   return 'data:image/png;base64,' + buffer.toString('base64');
 }
 
-// Helper: generate PWA files (fallback)
+// ========== HELPER: buat PWA ZIP (fallback) ==========
 async function generatePWAZip(name, url, icon192, icon512) {
   const zip = new JSZip();
-
   const manifest = {
     name,
     short_name: name,
@@ -76,32 +72,18 @@ async function generatePWAZip(name, url, icon192, icon512) {
       { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
     ]
   };
-
-  const html = `<!DOCTYPE html>
-  <html>
-  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png"><title>${name}</title>
-  <style>body{margin:0;padding:0;overflow:hidden;background:#fff}iframe{width:100vw;height:100vh;border:none}</style>
-  </head>
-  <body><iframe src="${url}" allow="geolocation; microphone; camera; midi; encrypted-media"></iframe></body>
-  </html>`;
-
-  const sw = `self.addEventListener('install',e=>e.waitUntil(caches.open('baim-cache').then(c=>c.addAll(['/','index.html','manifest.json','icon-192.png','icon-512.png']))));
-  self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;
-
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"><link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png"><title>${name}</title><style>body{margin:0;padding:0;overflow:hidden;background:#fff}iframe{width:100vw;height:100vh;border:none}</style></head><body><iframe src="${url}" allow="geolocation; microphone; camera; midi; encrypted-media"></iframe></body></html>`;
+  const sw = `self.addEventListener('install',e=>e.waitUntil(caches.open('baim-cache').then(c=>c.addAll(['/','index.html','manifest.json','icon-192.png','icon-512.png']))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));`;
   zip.file('index.html', html);
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
   zip.file('sw.js', sw);
-
-  // Convert base64 to buffer
   const toBuffer = (base64) => Buffer.from(base64.split(',')[1], 'base64');
   zip.file('icon-192.png', toBuffer(icon192));
   zip.file('icon-512.png', toBuffer(icon512));
-
   return await zip.generateAsync({ type: 'nodebuffer' });
 }
 
-// MAIN ENDPOINT
+// ========== MAIN ENDPOINT /build ==========
 app.post('/build', async (req, res) => {
   try {
     const { name, url, icon } = req.body;
@@ -109,7 +91,7 @@ app.post('/build', async (req, res) => {
       return res.status(400).json({ error: 'Nama dan URL wajib diisi' });
     }
 
-    // 1. Siapkan icon (resize ke 192 & 512)
+    // 1. Siapkan icon
     let iconBase64 = icon;
     if (!iconBase64) {
       iconBase64 = await generateDefaultIcon(name);
@@ -131,21 +113,15 @@ app.post('/build', async (req, res) => {
       ]
     };
 
-    // 3. Kirim ke PWABuilder API
-    const pwabuilderUrl = 'https://pwabuilder.com/api/apps';
-    const payload = {
-      manifest,
-      platforms: ['android']
-    };
-
-    const postRes = await fetch(pwabuilderUrl, {
+    // 3. Kirim ke PWABuilder
+    const payload = { manifest, platforms: ['android'] };
+    const pwabuilderRes = await fetch('https://pwabuilder.com/api/apps', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
 
-    if (!postRes.ok) {
-      // Jika PWABuilder gagal, fallback ke PWA ZIP
+    if (!pwabuilderRes.ok) {
       console.warn('PWABuilder error, fallback to PWA zip');
       const zipBuffer = await generatePWAZip(name, url, icon192, icon512);
       res.setHeader('Content-Type', 'application/zip');
@@ -153,51 +129,42 @@ app.post('/build', async (req, res) => {
       return res.send(zipBuffer);
     }
 
-    const postData = await postRes.json();
+    const postData = await pwabuilderRes.json();
     const appId = postData.id;
-    if (!appId) throw new Error('Tidak dapat memperoleh ID aplikasi dari PWABuilder');
+    if (!appId) throw new Error('ID aplikasi tidak ditemukan');
 
     // 4. Polling status
     let status = 'pending';
     let attempts = 0;
-    const maxAttempts = 45; // ~2.25 menit (3s interval)
-    while (status !== 'completed' && status !== 'failed' && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 3000));
+    while (status !== 'completed' && status !== 'failed' && attempts < 45) {
+      await new Promise(r => setTimeout(r, 3000));
       attempts++;
       const statusRes = await fetch(`https://pwabuilder.com/api/apps/${appId}/status`);
       if (!statusRes.ok) continue;
       const statusData = await statusRes.json();
       status = statusData.status || 'pending';
       if (status === 'completed') break;
-      if (status === 'failed') {
-        throw new Error('Build gagal di PWABuilder');
-      }
+      if (status === 'failed') throw new Error('Build gagal di PWABuilder');
     }
 
-    if (status !== 'completed') {
-      throw new Error('Waktu build habis. Coba lagi nanti.');
-    }
+    if (status !== 'completed') throw new Error('Waktu build habis');
 
     // 5. Download APK
     const downloadRes = await fetch(`https://pwabuilder.com/api/apps/${appId}/download/android`);
-    if (!downloadRes.ok) {
-      throw new Error(`Gagal download APK: ${downloadRes.status}`);
-    }
+    if (!downloadRes.ok) throw new Error(`Gagal download APK: ${downloadRes.status}`);
 
     const apkBuffer = await downloadRes.buffer();
     const fileName = `${name.toLowerCase().replace(/\s+/g, '-')}.apk`;
-
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(apkBuffer);
 
   } catch (err) {
     console.error(err);
-    // Fallback: jika terjadi error, coba kirim PWA zip
+    // Fallback: kirim PWA ZIP
     try {
       const { name, url, icon } = req.body;
-      let iconBase64 = icon;
-      if (!iconBase64) iconBase64 = await generateDefaultIcon(name);
+      let iconBase64 = icon || await generateDefaultIcon(name);
       const icon192 = await resizeIcon(iconBase64, 192);
       const icon512 = await resizeIcon(iconBase64, 512);
       const zipBuffer = await generatePWAZip(name, url, icon192, icon512);
@@ -205,7 +172,7 @@ app.post('/build', async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="${name.toLowerCase().replace(/\s+/g, '-')}-pwa.zip"`);
       return res.send(zipBuffer);
     } catch (fallbackErr) {
-      return res.status(500).json({ error: err.message || 'Terjadi kesalahan' });
+      res.status(500).json({ error: err.message || 'Terjadi kesalahan' });
     }
   }
 });
