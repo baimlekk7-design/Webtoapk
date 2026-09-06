@@ -22,39 +22,76 @@ async function resizeIcon(base64, size) {
   return 'data:image/png;base64,' + resizedBuffer.toString('base64');
 }
 
-// ========== HELPER: generate default icon ==========
+// ========== HELPER: generate default icon (dengan fallback) ==========
 async function generateDefaultIcon(name) {
-  const size = 512;
-  const image = new Jimp(size, size, 0xffffffff);
-  const hue = Math.floor(Math.random() * 360);
-  const baseColor = Jimp.rgbaToInt(
-    200 + 55 * Math.sin(hue * Math.PI / 180),
-    150 + 100 * Math.cos(hue * Math.PI / 180),
-    200 + 55 * Math.sin((hue + 120) * Math.PI / 180),
-    255
-  );
-  image.scan(0, 0, size, size, (x, y, idx) => {
-    const ratio = (x + y) / (2 * size);
-    const r = (baseColor >> 24) & 0xff;
-    const g = (baseColor >> 16) & 0xff;
-    const b = (baseColor >> 8) & 0xff;
-    const newR = Math.floor(r + (255 - r) * ratio);
-    const newG = Math.floor(g + (255 - g) * ratio);
-    const newB = Math.floor(b + (255 - b) * ratio);
-    image.setPixelColor(Jimp.rgbaToInt(newR, newG, newB, 255), x, y);
-  });
-  const font = await Jimp.loadFont(Jimp.FONT_SANS_128_BLACK);
-  const text = name.charAt(0).toUpperCase();
-  const textImg = new Jimp(size, size, 0x00000000);
-  textImg.print(font, 0, 0, text, size, size);
-  const bounds = await Jimp.measureText(font, text);
-  const tx = (size - bounds.width) / 2;
-  const ty = (size - bounds.height) / 2;
-  const white = new Jimp(size, size, 0xffffffff);
-  white.print(font, tx, ty, text);
-  image.composite(white, 0, 0);
-  const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
-  return 'data:image/png;base64,' + buffer.toString('base64');
+  try {
+    const size = 512;
+    const image = new Jimp(size, size, 0xffffffff);
+    // Warna gradien pastel
+    const hue = Math.floor(Math.random() * 360);
+    const baseColor = Jimp.rgbaToInt(
+      200 + 55 * Math.sin(hue * Math.PI / 180),
+      150 + 100 * Math.cos(hue * Math.PI / 180),
+      200 + 55 * Math.sin((hue + 120) * Math.PI / 180),
+      255
+    );
+    image.scan(0, 0, size, size, (x, y, idx) => {
+      const ratio = (x + y) / (2 * size);
+      const r = (baseColor >> 24) & 0xff;
+      const g = (baseColor >> 16) & 0xff;
+      const b = (baseColor >> 8) & 0xff;
+      const newR = Math.floor(r + (255 - r) * ratio);
+      const newG = Math.floor(g + (255 - g) * ratio);
+      const newB = Math.floor(b + (255 - b) * ratio);
+      image.setPixelColor(Jimp.rgbaToInt(newR, newG, newB, 255), x, y);
+    });
+
+    // Coba load font (ukuran 64 biasanya tersedia)
+    let font;
+    try {
+      font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
+    } catch (fontErr) {
+      // Jika font 64 gagal, coba yang lebih kecil
+      font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+    }
+
+    const text = name.charAt(0).toUpperCase();
+    const textImg = new Jimp(size, size, 0x00000000);
+    textImg.print(font, 0, 0, text, size, size);
+    const bounds = await Jimp.measureText(font, text);
+    const tx = (size - bounds.width) / 2;
+    const ty = (size - bounds.height) / 2;
+    const white = new Jimp(size, size, 0xffffffff);
+    white.print(font, tx, ty, text);
+    image.composite(white, 0, 0);
+
+    const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    return 'data:image/png;base64,' + buffer.toString('base64');
+  } catch (err) {
+    // Fallback: icon tanpa teks, hanya gradien
+    console.warn('Gagal membuat icon dengan teks, fallback ke gradien polos', err.message);
+    const size = 512;
+    const image = new Jimp(size, size, 0xffffffff);
+    const hue = Math.floor(Math.random() * 360);
+    const baseColor = Jimp.rgbaToInt(
+      200 + 55 * Math.sin(hue * Math.PI / 180),
+      150 + 100 * Math.cos(hue * Math.PI / 180),
+      200 + 55 * Math.sin((hue + 120) * Math.PI / 180),
+      255
+    );
+    image.scan(0, 0, size, size, (x, y, idx) => {
+      const ratio = (x + y) / (2 * size);
+      const r = (baseColor >> 24) & 0xff;
+      const g = (baseColor >> 16) & 0xff;
+      const b = (baseColor >> 8) & 0xff;
+      const newR = Math.floor(r + (255 - r) * ratio);
+      const newG = Math.floor(g + (255 - g) * ratio);
+      const newB = Math.floor(b + (255 - b) * ratio);
+      image.setPixelColor(Jimp.rgbaToInt(newR, newG, newB, 255), x, y);
+    });
+    const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    return 'data:image/png;base64,' + buffer.toString('base64');
+  }
 }
 
 // ========== HELPER: buat PWA ZIP (fallback) ==========
