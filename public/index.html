@@ -184,21 +184,45 @@
             body: JSON.stringify(payload)
           });
 
-          if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Gagal build');
-          }
+          // Cek tipe konten
+          const contentType = response.headers.get('content-type') || '';
 
-          // Jika respons berupa APK, download
-          const contentDisposition = response.headers.get('content-disposition');
-          const fileName = contentDisposition ? contentDisposition.split('filename=')[1].replace(/"/g, '') : 'app.apk';
-          const blob = await response.blob();
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = fileName;
-          link.click();
-          URL.revokeObjectURL(link.href);
-          showStatus(`✅ APK "${name}" berhasil dibuat dan diunduh!`, 'success');
+          if (response.ok) {
+            // Jika APK atau ZIP
+            if (contentType.includes('application/vnd.android.package-archive') || contentType.includes('application/zip')) {
+              const blob = await response.blob();
+              const contentDisposition = response.headers.get('content-disposition');
+              let fileName = 'app.apk';
+              if (contentDisposition) {
+                const match = contentDisposition.match(/filename="?(.+?)"?$/);
+                if (match) fileName = match[1];
+              }
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(blob);
+              link.download = fileName;
+              link.click();
+              URL.revokeObjectURL(link.href);
+              showStatus(`✅ File "${fileName}" berhasil diunduh!`, 'success');
+            } else {
+              // Kemungkinan JSON error
+              const text = await response.text();
+              try {
+                const json = JSON.parse(text);
+                showStatus('❌ ' + (json.error || 'Terjadi kesalahan'), 'error');
+              } catch (_) {
+                showStatus('❌ ' + text, 'error');
+              }
+            }
+          } else {
+            // Error response
+            const text = await response.text();
+            try {
+              const json = JSON.parse(text);
+              showStatus('❌ ' + (json.error || 'Terjadi kesalahan'), 'error');
+            } catch (_) {
+              showStatus('❌ ' + text, 'error');
+            }
+          }
         } catch (err) {
           showStatus('❌ ' + err.message, 'error');
         } finally {
