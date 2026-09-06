@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+  <title>Baim — APK Builder</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #f2f4f8;
+      color: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    .container {
+      background: #fff;
+      max-width: 580px;
+      width: 100%;
+      border-radius: 36px;
+      padding: 2rem 2rem 2.2rem;
+      box-shadow: 0 20px 40px -12px rgba(0,0,0,0.15);
+    }
+    .logo { font-size: 2.4rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.2rem; }
+    .logo small { font-size: 0.9rem; font-weight: 400; color: #666; }
+    .tagline { color: #5a5a72; font-size: 0.95rem; margin-bottom: 2rem; border-bottom: 1px solid #eaeaef; padding-bottom: 1.2rem; }
+    .form-group { margin-bottom: 1.6rem; }
+    label { display: block; font-weight: 500; font-size: 0.9rem; color: #2b2b3a; margin-bottom: 0.4rem; }
+    input[type="text"], input[type="url"] {
+      width: 100%; padding: 0.9rem 1.2rem; font-size: 1rem;
+      border: 1.5px solid #d5d5e5; border-radius: 20px; background: #fafafe;
+      transition: 0.15s; outline: none;
+    }
+    input:focus { border-color: #6c6c9e; background: #fff; box-shadow: 0 0 0 3px rgba(108,108,158,0.15); }
+    .file-upload-wrapper { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .file-upload-wrapper label { margin-bottom: 0; }
+    .custom-file-upload {
+      background: #f0f0f7; border: 1.5px dashed #b5b5d0; border-radius: 30px;
+      padding: 0.5rem 1.2rem; cursor: pointer; font-weight: 450; color: #3b3b50;
+      transition: 0.1s; font-size: 0.9rem; display: inline-block;
+    }
+    .custom-file-upload:hover { background: #e8e8f2; border-color: #8a8ab0; }
+    #iconPreview { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; background: #f0f0f5; border: 1px solid #ddd; display: none; }
+    .btn-generate {
+      width: 100%; background: #1c1c2e; color: #fff; border: none;
+      padding: 1.1rem; border-radius: 40px; font-size: 1.1rem; font-weight: 550;
+      cursor: pointer; transition: 0.15s; margin-top: 0.5rem; letter-spacing: 0.02em;
+    }
+    .btn-generate:hover { background: #2f2f4a; transform: scale(1.01); }
+    .btn-generate:disabled { opacity: 0.5; transform: none; pointer-events: none; }
+    .status-box {
+      margin-top: 1.8rem; padding: 1rem 1.2rem; border-radius: 20px;
+      background: #f0f7fe; border: 1px solid #c6d9f0; color: #1a385a;
+      font-size: 0.95rem; display: none; word-break: break-word;
+    }
+    .status-box.success { background: #e6f7ec; border-color: #9ed6b6; color: #1a5a3a; }
+    .status-box.error { background: #fde8e8; border-color: #f5baba; color: #7a2e2e; }
+    .footer-note { margin-top: 1.6rem; font-size: 0.7rem; color: #9a9ab0; text-align: center; }
+    .spinner {
+      display: inline-block; width: 1.2rem; height: 1.2rem;
+      border: 3px solid rgba(255,255,255,0.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 0.5rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #0d0d12; color: #eaeaf0; }
+      .container { background: #18181f; border: 1px solid #2b2b36; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.6); }
+      .logo small { color: #999; }
+      .tagline { color: #a0a0b8; border-bottom-color: #2a2a36; }
+      label { color: #d0d0e0; }
+      input[type="text"], input[type="url"] { background: #1e1e28; border-color: #3f3f52; color: #f0f0f5; }
+      input:focus { border-color: #7a7aaa; background: #262632; box-shadow: 0 0 0 3px rgba(122,122,170,0.2); }
+      .custom-file-upload { background: #252533; border-color: #4a4a62; color: #c0c0d8; }
+      .custom-file-upload:hover { background: #323248; border-color: #6a6a8a; }
+      .btn-generate { background: #2f2f42; color: #ececf5; }
+      .btn-generate:hover { background: #3f3f58; }
+      .status-box { background: #1a2636; border-color: #2f4466; color: #b0cce8; }
+      .status-box.success { background: #1a2e24; border-color: #2a6a4a; color: #9ed6b6; }
+      .status-box.error { background: #2e1a1a; border-color: #6a3a3a; color: #f5baba; }
+      .footer-note { color: #5a5a72; }
+      #iconPreview { background: #1e1e28; border-color: #3a3a4a; }
+    }
+    @media (max-width:480px) { .container { padding:1.5rem; } .logo { font-size:2rem; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">Baim <small>APK Builder</small></div>
+    <div class="tagline">Ubah website jadi aplikasi Android (.apk) instan</div>
+
+    <form id="appForm">
+      <div class="form-group">
+        <label for="appName">Nama Aplikasi</label>
+        <input type="text" id="appName" placeholder="MyApp" value="MyApp" required>
+      </div>
+      <div class="form-group">
+        <label for="appUrl">Website URL</label>
+        <input type="url" id="appUrl" placeholder="https://example.com" value="https://example.com" required>
+      </div>
+      <div class="form-group">
+        <label>Icon (opsional)</label>
+        <div class="file-upload-wrapper">
+          <label class="custom-file-upload" for="iconUpload">📁 Pilih gambar</label>
+          <input type="file" id="iconUpload" accept="image/*" style="display:none">
+          <img id="iconPreview" alt="Preview icon">
+        </div>
+        <div style="font-size:0.75rem; color:#888; margin-top:0.3rem;">Ukuran disarankan 512×512px</div>
+      </div>
+      <button type="submit" class="btn-generate" id="generateBtn">🚀 Build APK</button>
+    </form>
+
+    <div id="statusBox" class="status-box"></div>
+    <div class="footer-note">Baim — APK langsung dari URL</div>
+  </div>
+
+  <script>
+    (function() {
+      const form = document.getElementById('appForm');
+      const appName = document.getElementById('appName');
+      const appUrl = document.getElementById('appUrl');
+      const iconUpload = document.getElementById('iconUpload');
+      const iconPreview = document.getElementById('iconPreview');
+      const statusBox = document.getElementById('statusBox');
+      const generateBtn = document.getElementById('generateBtn');
+
+      let iconDataURL = null;
+
+      iconUpload.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 512, 512);
+            const aspect = img.width / img.height;
+            let drawW = 512, drawH = 512;
+            if (aspect > 1) drawH = 512 / aspect;
+            else drawW = 512 * aspect;
+            const x = (512 - drawW) / 2;
+            const y = (512 - drawH) / 2;
+            ctx.drawImage(img, x, y, drawW, drawH);
+            iconDataURL = canvas.toDataURL('image/png');
+            iconPreview.src = iconDataURL;
+            iconPreview.style.display = 'block';
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const name = appName.value.trim() || 'MyApp';
+        const url = appUrl.value.trim();
+        if (!url) {
+          showStatus('Masukkan URL website.', 'error');
+          return;
+        }
+        try { new URL(url); } catch (_) {
+          showStatus('URL tidak valid. Gunakan format https://example.com', 'error');
+          return;
+        }
+
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<span class="spinner"></span> Building...';
+        showStatus('⏳ Mengirim ke server dan membangun APK...', 'info');
+
+        try {
+          const payload = { name, url, icon: iconDataURL || null };
+          const response = await fetch('/build', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Gagal build');
+          }
+
+          // Jika respons berupa APK, download
+          const contentDisposition = response.headers.get('content-disposition');
+          const fileName = contentDisposition ? contentDisposition.split('filename=')[1].replace(/"/g, '') : 'app.apk';
+          const blob = await response.blob();
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = fileName;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          showStatus(`✅ APK "${name}" berhasil dibuat dan diunduh!`, 'success');
+        } catch (err) {
+          showStatus('❌ ' + err.message, 'error');
+        } finally {
+          generateBtn.disabled = false;
+          generateBtn.innerHTML = '🚀 Build APK';
+        }
+      });
+
+      function showStatus(msg, type = 'info') {
+        statusBox.innerHTML = msg;
+        statusBox.className = 'status-box ' + (type === 'success' ? 'success' : type === 'error' ? 'error' : '');
+        statusBox.style.display = 'block';
+      }
+    })();
+  </script>
+</body>
+</html>
