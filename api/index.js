@@ -1,0 +1,159 @@
+const express = require('express');
+const fetch = require('node-fetch');
+const Jimp = require('jimp');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Sajikan frontend
+const path = require('path');
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Helper: resize base64 image to target size (return base64)
+async function resizeIcon(base64, size) {
+  const buffer = Buffer.from(base64.split(',')[1], 'base64');
+  const image = await Jimp.read(buffer);
+  image.resize(size, size);
+  // Jika gambar tidak persegi, kita crop/tengah
+  const newImage = new Jimp(size, size, 0xffffffff);
+  const x = (size - image.bitmap.width) / 2;
+  const y = (size - image.bitmap.height) / 2;
+  newImage.composite(image, x, y);
+  const resizedBuffer = await newImage.getBufferAsync(Jimp.MIME_PNG);
+  return 'data:image/png;base64,' + resizedBuffer.toString('base64');
+}
+
+// Helper: generate default icon
+async function generateDefaultIcon(name) {
+  const size = 512;
+  const image = new Jimp(size, size, 0xffffffff);
+  // Warna random pastel
+  const hue = Math.floor(Math.random() * 360);
+  const color = Jimp.rgbaToInt(200 + 55 * Math.sin(hue * Math.PI / 180), 150 + 100 * Math.cos(hue * Math.PI / 180), 200 + 55 * Math.sin((hue + 120) * Math.PI / 180), 255);
+  image.scan(0, 0, size, size, (x, y, idx) => {
+    // Gradien sederhana
+    const ratio = (x + y) / (2 * size);
+    const r = (color >> 24) & 0xff;
+    const g = (color >> 16) & 0xff;
+    const b = (color >> 8) & 0xff;
+    const newR = Math.floor(r + (255 - r) * ratio);
+    const newG = Math.floor(g + (255 - g) * ratio);
+    const newB = Math.floor(b + (255 - b) * ratio);
+    image.setPixelColor(Jimp.rgbaToInt(newR, newG, newB, 255), x, y);
+  });
+  // Tulis huruf pertama
+  const font = await Jimp.loadFont(Jimp.FONT_SANS_128_BLACK);
+  const text = name.charAt(0).toUpperCase();
+  const textImg = new Jimp(size, size, 0x00000000);
+  textImg.print(font, 0, 0, text, size, size);
+  // Posisi tengah
+  const bounds = await Jimp.measureText(font, text);
+  const tx = (size - bounds.width) / 2;
+  const ty = (size - bounds.height) / 2;
+  // Composite dengan warna putih
+  const white = new Jimp(size, size, 0xffffffff);
+  white.print(font, tx, ty, text);
+  // Gabungkan
+  image.composite(white, 0, 0);
+  const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+  return 'data:image/png;base64,' + buffer.toString('base64');
+}
+
+app.post('/build', async (req, res) => {
+  try {
+    const { name, url, icon } = req.body;
+    if (!name || !url) {
+      return res.status(400).json({ error: 'Nama dan URL wajib diisi' });
+    }
+
+    // 1. Siapkan icon (resize ke 192 & 512)
+    let iconBase64 = icon;
+    if (!iconBase64) {
+      iconBase64 = await generateDefaultIcon(name);
+    }
+    const icon192 = await resizeIcon(iconBase64, 192);
+    const icon512 = await resizeIcon(iconBase64, 512);
+
+    // 2. Build manifest (data URI untuk icons)
+    const manifest = {
+      name,
+      short_name: name,
+      start_url: url,
+      display: 'standalone',
+      background_color: '#ffffff',
+      theme_color: '#1c1c2e',
+      icons: [
+        { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any' }
+      ]
+    };
+
+    // 3. Kirim ke PWABuilder API
+    const pwabuilderUrl = 'https://pwabuilder.com/api/apps';
+    const payload = {
+      manifest: manifest,
+      platforms: ['android']
+    };
+
+    const postRes = await fetch(pwabuilderUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!postRes.ok) {
+      const errText = await postRes.text();
+      throw new Error(`PWABuilder error: ${postRes.status} - ${errText}`);
+    }
+
+    const postData = await postRes.json();
+    const appId = postData.id;
+    if (!appId) throw new Error('Tidak dapat memperoleh ID aplikasi');
+
+    // 4. Polling status
+    let status = 'pending';
+    let attempts = 0;
+    const maxAttempts = 40; // ~2 menit (3s interval)
+    while (status !== 'completed' && status !== 'failed' && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      attempts++;
+      const statusRes = await fetch(`https://pwabuilder.com/api/apps/${appId}/status`);
+      if (!statusRes.ok) continue;
+      const statusData = await statusRes.json();
+      status = statusData.status || 'pending';
+      if (status === 'completed') break;
+      if (status === 'failed') {
+        throw new Error('Build gagal di PWABuilder. Coba lagi nanti.');
+      }
+    }
+
+    if (status !== 'completed') {
+      throw new Error('Waktu build habis. Coba lagi nanti.');
+    }
+
+    // 5. Download APK
+    const downloadRes = await fetch(`https://pwabuilder.com/api/apps/${appId}/download/android`);
+    if (!downloadRes.ok) {
+      const errText = await downloadRes.text();
+      throw new Error(`Gagal download APK: ${downloadRes.status} - ${errText}`);
+    }
+
+    const apkBuffer = await downloadRes.buffer();
+    const fileName = `${name.toLowerCase().replace(/\s+/g, '-')}.apk`;
+
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(apkBuffer);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Terjadi kesalahan' });
+  }
+});
+
+module.exports = app;
