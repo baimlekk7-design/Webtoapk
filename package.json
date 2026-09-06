@@ -1,15 +1,16 @@
 {
-  "name": "baim-apk-builder",
+  "name": "baim-apk-builder-api",
   "version": "1.0.0",
-  "description": "Baim — ubah website jadi APK Android",
+  "description": "API untuk membuat APK dari URL website",
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
+    "express": "^4.18.2",
     "jimp": "^0.22.10",
+    "jszip": "^3.10.1",
     "node-fetch": "^2.7.0"
   }
 }
